@@ -48,6 +48,16 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 - `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
 - `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
 
+## Artifacts
+
+### `artifacts/mf-portfolio-xray` — MF Portfolio X-Ray
+
+Single-page web app for analysing mutual fund portfolios. Two screens: Upload (PDF drag-and-drop) and Results (summary cards, donut chart via Chart.js CDN, overlap warnings, AI rebalancing recommendations). Uses dummy data currently. Dark navy + green color scheme.
+
+- Preview path: `/`
+- No backend required (frontend-only, all dummy data)
+- Chart.js loaded via CDN in the DonutChart component
+
 ## Packages
 
 ### `artifacts/api-server` (`@workspace/api-server`)

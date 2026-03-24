@@ -5,6 +5,12 @@ const CHART_COLORS = [
   "#06b6d4", "#f97316", "#84cc16", "#ec4899", "#14b8a6",
 ];
 
+const SAMPLE_TEXT = `CAMS Mutual Fund Statement. Investor: Rahul Sharma. Folio: 1234567.
+Fund: Axis Bluechip Fund - Growth. Units: 150.234. NAV: 45.23. Value: 6792.08. Purchase Date: 2021-03-15. Amount Invested: 5000.
+Fund: HDFC Mid Cap Opportunities - Growth. Units: 89.456. NAV: 78.45. Value: 7017.82. Purchase Date: 2020-11-20. Amount Invested: 4000.
+Fund: SBI Small Cap Fund - Growth. Units: 45.123. NAV: 120.34. Value: 5430.49. Purchase Date: 2022-01-10. Amount Invested: 3000.
+Fund: Mirae Asset Large Cap Fund. Units: 200.567. NAV: 34.56. Value: 6931.59. Purchase Date: 2021-07-05. Amount Invested: 5500.`;
+
 const PDFJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
@@ -141,9 +147,11 @@ function SummaryCard({ label, value, icon, accent }: {
 
 function UploadPage({
   onAnalyse,
+  onTestSample,
   error,
 }: {
   onAnalyse: (file: File | null) => void;
+  onTestSample: () => void;
   error: string | null;
 }) {
   const [dragOver, setDragOver] = useState(false);
@@ -222,6 +230,21 @@ function UploadPage({
             </div>
           )}
         </div>
+
+        <button
+          onClick={onTestSample}
+          className="flex items-center gap-2 text-sm font-medium transition-colors px-4 py-2 rounded-xl border"
+          style={{
+            borderColor: "rgba(59,130,246,0.35)",
+            color: "#93c5fd",
+            background: "rgba(59,130,246,0.07)",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
+          Test with Sample Data
+        </button>
 
         {error && (
           <div className="w-full rounded-xl px-4 py-3 border text-sm"
@@ -494,25 +517,39 @@ export default function App() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const callAnalyseAPI = async (text: string) => {
+    const response = await fetch("/api/analyse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Analysis failed. Please try again.");
+    return data as AnalysisResult;
+  };
+
   const handleAnalyse = async (file: File | null) => {
     if (!file) { setError("Please select a PDF file first."); return; }
     setError(null);
     setScreen("loading");
-
     try {
       const text = await extractTextFromPDF(file);
       if (text.trim().length < 50) throw new Error("Could not read text from this PDF. Please use a text-based CAMS statement.");
+      const data = await callAnalyseAPI(text);
+      setResult(data);
+      setScreen("results");
+    } catch (err: any) {
+      setError(err.message || "Something went wrong. Please try again.");
+      setScreen("upload");
+    }
+  };
 
-      const response = await fetch("/api/analyse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Analysis failed. Please try again.");
-
-      setResult(data as AnalysisResult);
+  const handleTestSample = async () => {
+    setError(null);
+    setScreen("loading");
+    try {
+      const data = await callAnalyseAPI(SAMPLE_TEXT);
+      setResult(data);
       setScreen("results");
     } catch (err: any) {
       setError(err.message || "Something went wrong. Please try again.");
@@ -522,5 +559,5 @@ export default function App() {
 
   if (screen === "loading") return <LoadingPage />;
   if (screen === "results" && result) return <ResultsPage result={result} onReset={() => { setResult(null); setScreen("upload"); }} />;
-  return <UploadPage onAnalyse={handleAnalyse} error={error} />;
+  return <UploadPage onAnalyse={handleAnalyse} onTestSample={handleTestSample} error={error} />;
 }

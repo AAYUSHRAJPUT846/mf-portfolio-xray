@@ -55,8 +55,10 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 Single-page web app for analysing mutual fund portfolios. Two screens: Upload (PDF drag-and-drop) and Results (summary cards, donut chart via Chart.js CDN, overlap warnings, AI rebalancing recommendations). Uses dummy data currently. Dark navy + green color scheme.
 
 - Preview path: `/`
-- No backend required (frontend-only, all dummy data)
 - Chart.js loaded via CDN in the DonutChart component
+- pdf.js loaded via CDN (v3.11.174) for client-side PDF text extraction
+- Backend: `POST /api/analyse` on the shared api-server; calls Groq API (llama-3.3-70b-versatile) with the extracted PDF text
+- Requires `GROQ_API_KEY` secret in environment
 
 ## Packages
 

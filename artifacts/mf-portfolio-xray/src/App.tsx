@@ -12,29 +12,62 @@ const GREEN = "#22c55e";
 const GREEN_DIM = "rgba(34,197,94,0.12)";
 const GREEN_BORDER = "rgba(34,197,94,0.3)";
 
-const SAMPLE_TEXT = `CAMS Mutual Fund Statement. Investor: Rahul Sharma. Folio: 1234567.
-Fund: Axis Bluechip Fund - Growth. Units: 150.234. NAV: 45.23. Value: 6792.08. Purchase Date: 2021-03-15. Amount Invested: 5000.
-Fund: HDFC Mid Cap Opportunities - Growth. Units: 89.456. NAV: 78.45. Value: 7017.82. Purchase Date: 2020-11-20. Amount Invested: 4000.
-Fund: SBI Small Cap Fund - Growth. Units: 45.123. NAV: 120.34. Value: 5430.49. Purchase Date: 2022-01-10. Amount Invested: 3000.
-Fund: Mirae Asset Large Cap Fund. Units: 200.567. NAV: 34.56. Value: 6931.59. Purchase Date: 2021-07-05. Amount Invested: 5500.`;
+const SAMPLE_TEXT = `CAMS Consolidated Account Statement
+Investor: Arjun Mehta | PAN: ABCPM1234Z | Email: arjun.mehta@gmail.com
+Statement Period: 01-Apr-2019 to 31-Mar-2024
+
+Folio: 7845612 - Mirae Asset Large Cap Fund - Regular Growth
+  SIP: 15-May-2019, Units: 523.456, NAV: 38.12, Amount: Rs.20,000
+  SIP: 10-Jan-2021, Units: 312.145, NAV: 48.75, Amount: Rs.15,000
+  Current NAV: 98.45 | Current Value: Rs.82,665 | Total Invested: Rs.35,000
+
+Folio: 7845613 - Axis Bluechip Fund - Regular Growth
+  SIP: 20-Aug-2020, Units: 284.123, NAV: 28.15, Amount: Rs.8,000
+  SIP: 15-Mar-2022, Units: 198.567, NAV: 35.60, Amount: Rs.7,070
+  Current NAV: 52.30 | Current Value: Rs.25,265 | Total Invested: Rs.15,070
+
+Folio: 7845614 - HDFC Mid-Cap Opportunities Fund - Regular Growth
+  SIP: 05-Feb-2020, Units: 412.789, NAV: 36.48, Amount: Rs.15,057
+  SIP: 10-Oct-2022, Units: 167.234, NAV: 52.17, Amount: Rs.8,727
+  Current NAV: 108.72 | Current Value: Rs.63,135 | Total Invested: Rs.23,784
+
+Folio: 7845615 - Kotak Emerging Equity Fund - Regular Growth
+  SIP: 12-Jun-2021, Units: 278.945, NAV: 53.78, Amount: Rs.15,000
+  SIP: 15-Sep-2023, Units: 124.312, NAV: 72.40, Amount: Rs.9,000
+  Current NAV: 104.35 | Current Value: Rs.42,093 | Total Invested: Rs.24,000
+
+Folio: 7845616 - Parag Parikh Flexi Cap Fund - Regular Growth
+  SIP: 08-Nov-2019, Units: 456.123, NAV: 21.92, Amount: Rs.10,000
+  SIP: 20-Jul-2022, Units: 189.456, NAV: 39.15, Amount: Rs.7,413
+  Current NAV: 75.23 | Current Value: Rs.48,548 | Total Invested: Rs.17,413
+
+Portfolio Summary:
+Total Amount Invested: Rs.1,15,267
+Total Current Value: Rs.2,61,706
+Total Gain: Rs.1,46,439
+Weighted Average Expense Ratio: 1.24%`;
 
 const PDFJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
 type AnalysisResult = {
   totalValue: number;
+  amountInvested: number;
+  totalGain: number;
   xirr: number;
   numberOfFunds: number;
   expenseDrag: number;
   funds: { name: string; percentage: number }[];
   overlapWarning: string;
   rebalancingAdvice: string;
+  portfolioScore: number;
+  scoreReason: string;
 };
 
 type Screen = "upload" | "loading" | "results";
 
 declare global {
-  interface Window { Chart: any; pdfjsLib: any; }
+  interface Window { Chart: any; pdfjsLib: any; html2canvas: any; }
 }
 
 function formatINR(v: number): string {
@@ -50,6 +83,18 @@ function usePDFJS(): boolean {
     const s = document.createElement("script");
     s.src = PDFJS_CDN;
     s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; setLoaded(true); };
+    document.head.appendChild(s);
+  }, []);
+  return loaded;
+}
+
+function useHTML2Canvas(): boolean {
+  const [loaded, setLoaded] = useState(!!window.html2canvas);
+  useEffect(() => {
+    if (window.html2canvas) { setLoaded(true); return; }
+    const s = document.createElement("script");
+    s.src = "https://html2canvas.hertzen.com/dist/html2canvas.min.js";
+    s.onload = () => setLoaded(true);
     document.head.appendChild(s);
   }, []);
   return loaded;
@@ -133,20 +178,57 @@ function MetricCard({ label, value, sub, iconPath, valueColor }: {
   valueColor?: string;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl p-5 border"
+    <div className="flex flex-col gap-2 rounded-2xl p-4 border"
       style={{ background: CARD_BG, borderColor: BORDER }}>
       <div className="flex items-center justify-between">
-        <span className="text-slate-400 text-xs font-semibold uppercase tracking-widest">{label}</span>
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: GREEN_DIM }}>
+        <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-widest leading-tight">{label}</span>
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: GREEN_DIM }}>
           {iconPath}
         </div>
       </div>
       <div>
-        <div className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: valueColor ?? "#f1f5f9" }}>
+        <div className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: valueColor ?? "#f1f5f9" }}>
           {value}
         </div>
-        {sub && <div className="text-xs text-slate-500 mt-0.5">{sub}</div>}
+        {sub && <div className="text-[10px] text-slate-500 mt-0.5">{sub}</div>}
       </div>
+    </div>
+  );
+}
+
+function HealthScoreCircle({ score, reason }: { score: number; reason: string }) {
+  const size = 180;
+  const r = 76;
+  const circ = 2 * Math.PI * r;
+  const safeScore = Math.max(0, Math.min(100, score));
+  const dashOffset = circ - (safeScore / 100) * circ;
+  const color = safeScore >= 70 ? "#22c55e" : safeScore >= 40 ? "#f97316" : "#ef4444";
+  const label = safeScore >= 70 ? "Healthy" : safeScore >= 40 ? "Moderate" : "At Risk";
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#1e293b" strokeWidth="12" />
+          <circle
+            cx={size / 2} cy={size / 2} r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth="12"
+            strokeLinecap="round"
+            strokeDasharray={circ}
+            strokeDashoffset={dashOffset}
+            style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)", filter: `drop-shadow(0 0 8px ${color}60)` }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-5xl font-black leading-none" style={{ color }}>{safeScore}</span>
+          <span className="text-slate-500 text-xs mt-0.5">/ 100</span>
+          <span className="text-xs font-semibold mt-1 px-2 py-0.5 rounded-full"
+            style={{ background: `${color}18`, color }}>{label}</span>
+        </div>
+      </div>
+      <p className="text-slate-400 text-sm text-center max-w-xs leading-relaxed">{reason}</p>
     </div>
   );
 }
@@ -159,6 +241,16 @@ function SectionHeader({ title, badge }: { title: string; badge?: string }) {
         <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
           style={{ background: "rgba(34,197,94,0.15)", color: GREEN }}>{badge}</span>
       )}
+    </div>
+  );
+}
+
+function Footer() {
+  return (
+    <div className="py-4 px-6 border-t text-center" style={{ borderColor: BORDER }}>
+      <span className="text-slate-600 text-xs">
+        MF Portfolio X-Ray &mdash; ET AI Hackathon 2026 &nbsp;·&nbsp; Not financial advice
+      </span>
     </div>
   );
 }
@@ -182,7 +274,6 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: BG }}>
-      {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: BORDER }}>
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: GREEN }}>
@@ -195,11 +286,9 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
         <span className="text-xs text-slate-500 hidden sm:block">ET AI Hackathon 2026</span>
       </div>
 
-      {/* Hero */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-16">
         <div className="w-full max-w-xl flex flex-col items-center gap-6 animate-fade-in-up">
 
-          {/* Badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium"
             style={{ borderColor: GREEN_BORDER, background: GREEN_DIM, color: GREEN }}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill={GREEN} stroke="none">
@@ -208,7 +297,6 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
             Powered by Groq AI — Free for every Indian investor
           </div>
 
-          {/* Headline */}
           <div className="text-center flex flex-col gap-3">
             <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight leading-none">
               <span className="text-white">MF Portfolio</span>{" "}
@@ -219,7 +307,6 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
             </p>
           </div>
 
-          {/* Upload box */}
           <div
             className="w-full rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-4 cursor-pointer p-10 transition-all duration-200"
             style={{
@@ -254,12 +341,11 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
                 <p className="text-slate-200 font-medium text-sm">
                   Drop your CAMS PDF here, or <span style={{ color: GREEN }} className="underline underline-offset-2">browse</span>
                 </p>
-                <p className="text-slate-500 text-xs mt-1">Supports CAMS consolidated account statements (PDF)</p>
+                <p className="text-slate-500 text-xs mt-1">Supports CAMS & KFintech consolidated account statements (PDF)</p>
               </div>
             )}
           </div>
 
-          {/* Error */}
           {error && (
             <div className="w-full rounded-xl px-4 py-3 border flex items-center gap-2 text-sm"
               style={{ background: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.3)", color: "#fca5a5" }}>
@@ -270,7 +356,6 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
             </div>
           )}
 
-          {/* Buttons */}
           <div className="w-full flex flex-col gap-3">
             <button
               onClick={() => onAnalyse(file)}
@@ -293,7 +378,6 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
             </button>
           </div>
 
-          {/* Trust badges */}
           <div className="flex items-center gap-5 flex-wrap justify-center pt-1">
             {["Groq llama-3.3-70b", "No data stored", "Instant results"].map((t) => (
               <div key={t} className="flex items-center gap-1.5 text-slate-500 text-xs">
@@ -307,7 +391,6 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
         </div>
       </div>
 
-      {/* Footer */}
       <Footer />
     </div>
   );
@@ -366,27 +449,65 @@ function LoadingPage() {
   );
 }
 
-function Footer() {
-  return (
-    <div className="py-4 px-6 border-t text-center" style={{ borderColor: BORDER }}>
-      <span className="text-slate-600 text-xs">
-        MF Portfolio X-Ray &mdash; ET AI Hackathon 2026 &nbsp;·&nbsp; Not financial advice
-      </span>
-    </div>
-  );
+function splitAdviceSentences(text: string): string[] {
+  const byNewline = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 2);
+  if (byNewline.length >= 2) return byNewline;
+  const bySentence = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 4);
+  return bySentence.length >= 1 ? bySentence : [text];
 }
 
 function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () => void }) {
-  const adviceLines = result.rebalancingAdvice
-    .split(/\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const html2canvasReady = useHTML2Canvas();
+  const [sharing, setSharing] = useState(false);
 
+  const adviceLines = splitAdviceSentences(result.rebalancingAdvice);
   const xirrPositive = result.xirr >= 0;
+  const gainPositive = result.totalGain >= 0;
+
+  const handleShare = async () => {
+    if (!resultsRef.current || !window.html2canvas) return;
+    setSharing(true);
+    try {
+      const canvas = await window.html2canvas(resultsRef.current, {
+        backgroundColor: BG,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement("a");
+      link.download = "mf-portfolio-xray.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const iconRupee = (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  );
+  const iconTrend = (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
+    </svg>
+  );
+  const iconGrid = (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+    </svg>
+  );
+  const iconDrag = (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  );
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: BG }}>
-      {/* Navbar */}
       <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10" style={{ background: BG, borderColor: BORDER }}>
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: GREEN }}>
@@ -401,67 +522,66 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
             Analysis Complete
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-500 text-xs hidden sm:block">{result.numberOfFunds} funds detected</span>
-        </div>
+        <span className="text-slate-500 text-xs hidden sm:block">{result.numberOfFunds} funds detected</span>
       </div>
 
-      {/* Main content */}
-      <div className="flex-1 px-4 sm:px-6 py-8">
-        <div className="max-w-5xl mx-auto flex flex-col gap-7 animate-fade-in-up">
+      <div ref={resultsRef} className="flex-1 px-4 sm:px-6 py-8" style={{ background: BG }}>
+        <div className="max-w-5xl mx-auto flex flex-col gap-6 animate-fade-in-up">
 
-          {/* ── Metric cards ── */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          {/* ── 6 Metric Cards ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <MetricCard
-              label="Total Portfolio Value"
+              label="Total Value"
               value={formatINR(result.totalValue)}
               sub="Current market value"
               valueColor={GREEN}
-              iconPath={
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                </svg>
-              }
+              iconPath={iconRupee}
+            />
+            <MetricCard
+              label="Amount Invested"
+              value={formatINR(result.amountInvested ?? 0)}
+              sub="Total invested"
+              iconPath={iconRupee}
+            />
+            <MetricCard
+              label="Total Gain"
+              value={`${gainPositive ? "+" : ""}${formatINR(result.totalGain ?? 0)}`}
+              sub={gainPositive ? "Profit" : "Loss"}
+              valueColor={gainPositive ? GREEN : "#ef4444"}
+              iconPath={iconTrend}
             />
             <MetricCard
               label="XIRR Returns"
               value={`${xirrPositive ? "+" : ""}${result.xirr.toFixed(1)}%`}
               sub="Annualised return"
               valueColor={xirrPositive ? GREEN : "#ef4444"}
-              iconPath={
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
-                </svg>
-              }
+              iconPath={iconTrend}
             />
             <MetricCard
-              label="Number of Funds"
+              label="Funds"
               value={String(result.numberOfFunds)}
               sub="Active schemes"
-              iconPath={
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-                  <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-                </svg>
-              }
+              iconPath={iconGrid}
             />
             <MetricCard
               label="Expense Drag"
               value={`${result.expenseDrag.toFixed(2)}%`}
               sub="Weighted avg TER"
               valueColor="#ef4444"
-              iconPath={
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                </svg>
-              }
+              iconPath={iconDrag}
             />
+          </div>
+
+          {/* ── Portfolio Health Score ── */}
+          <div className="rounded-2xl border p-6 flex flex-col items-center gap-2"
+            style={{ background: CARD_BG, borderColor: BORDER }}>
+            <SectionHeader title="Portfolio Health Score" />
+            <HealthScoreCircle score={result.portfolioScore ?? 0} reason={result.scoreReason ?? ""} />
           </div>
 
           {/* ── Chart + Overlap grid ── */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
 
-            {/* Donut chart col (wider) */}
             <div className="lg:col-span-3 rounded-2xl border p-5 sm:p-6 flex flex-col gap-5"
               style={{ background: CARD_BG, borderColor: BORDER }}>
               <SectionHeader title="Portfolio Allocation" />
@@ -472,7 +592,6 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
                   <span className="text-white font-bold text-xl">{result.numberOfFunds} Funds</span>
                 </div>
               </div>
-              {/* Legend */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
                 {result.funds.map((f, i) => (
                   <div key={i} className="flex items-center gap-2 min-w-0">
@@ -484,7 +603,6 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
               </div>
             </div>
 
-            {/* Overlap warning col */}
             <div className="lg:col-span-2 rounded-2xl border p-5 sm:p-6 flex flex-col gap-4"
               style={{ background: "rgba(30,20,0,0.6)", borderColor: "rgba(234,179,8,0.4)" }}>
               <div className="flex items-center gap-2.5">
@@ -521,16 +639,15 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
               </span>
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               {adviceLines.map((line, i) => (
-                <div key={i} className="flex gap-3 items-start">
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                    style={{ background: "rgba(34,197,94,0.15)", border: `1px solid ${GREEN_BORDER}` }}>
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                <div key={i} className="flex gap-3 items-start rounded-xl p-3"
+                  style={{ background: "rgba(34,197,94,0.05)", border: `1px solid rgba(34,197,94,0.1)` }}>
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 font-bold text-xs"
+                    style={{ background: "rgba(34,197,94,0.18)", border: `1px solid ${GREEN_BORDER}`, color: GREEN }}>
+                    {i + 1}
                   </div>
-                  <p className="text-slate-300 text-sm leading-relaxed">{line}</p>
+                  <p className="text-slate-300 text-sm leading-relaxed">{line.replace(/^\d+\.\s*/, "")}</p>
                 </div>
               ))}
             </div>
@@ -543,11 +660,23 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
             </div>
           </div>
 
-          {/* ── Analyse Another button ── */}
-          <div className="flex justify-center pb-2">
+          {/* ── Action buttons ── */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pb-2">
+            <button
+              onClick={handleShare}
+              disabled={!html2canvasReady || sharing}
+              className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl font-semibold text-sm transition-all duration-150 hover:opacity-90 active:scale-[0.985] disabled:opacity-50"
+              style={{ background: `linear-gradient(135deg, #22c55e, #16a34a)`, color: "#fff", boxShadow: "0 4px 20px rgba(34,197,94,0.3)" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+              {sharing ? "Saving…" : "Share Results"}
+            </button>
+
             <button onClick={onReset}
-              className="flex items-center gap-2.5 px-8 py-3.5 rounded-xl font-semibold text-sm border transition-all duration-150 hover:border-green-700 hover:text-green-300"
-              style={{ borderColor: BORDER, color: "#94a3b8" }}>
+              className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl font-semibold text-sm border transition-all duration-150 hover:border-green-700 hover:text-green-300"
+              style={{ borderColor: BORDER, color: "#94a3b8", background: "rgba(30,41,59,0.5)" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="1 4 1 10 7 10" />
                 <path d="M3.51 15a9 9 0 1 0 .49-4.88" />
@@ -555,10 +684,10 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
               Analyse Another Portfolio
             </button>
           </div>
+
         </div>
       </div>
 
-      {/* Footer */}
       <Footer />
     </div>
   );

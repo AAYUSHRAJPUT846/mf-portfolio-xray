@@ -12,6 +12,8 @@ const GREEN = "#22c55e";
 const GREEN_DIM = "rgba(34,197,94,0.12)";
 const GREEN_BORDER = "rgba(34,197,94,0.3)";
 
+const TODAY = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+
 const SAMPLE_TEXT = `CAMS Consolidated Account Statement
 Investor: Arjun Mehta | PAN: ABCPM1234Z | Email: arjun.mehta@gmail.com
 Statement Period: 01-Apr-2019 to 31-Mar-2024
@@ -124,7 +126,7 @@ function useChartJS(): boolean {
   return loaded;
 }
 
-function DonutChart({ funds }: { funds: { name: string; percentage: number }[] }) {
+function DonutChart({ funds, centerLabel }: { funds: { name: string; percentage: number }[]; centerLabel: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<any>(null);
   const ready = useChartJS();
@@ -143,13 +145,13 @@ function DonutChart({ funds }: { funds: { name: string; percentage: number }[] }
           backgroundColor: CHART_COLORS,
           borderColor: BG,
           borderWidth: 3,
-          hoverOffset: 10,
+          hoverOffset: 12,
         }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: "68%",
+        cutout: "70%",
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -167,18 +169,22 @@ function DonutChart({ funds }: { funds: { name: string; percentage: number }[] }
     return () => { if (chartRef.current) chartRef.current.destroy(); };
   }, [ready, funds]);
 
-  return <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <div className="relative" style={{ width: "100%", height: "100%" }}>
+      <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="text-slate-400 text-xs mb-0.5">Total Value</span>
+        <span className="text-white font-black text-lg leading-tight text-center px-2">{centerLabel}</span>
+      </div>
+    </div>
+  );
 }
 
-function MetricCard({ label, value, sub, iconPath, valueColor }: {
-  label: string;
-  value: string;
-  sub?: string;
-  iconPath: React.ReactNode;
-  valueColor?: string;
+function MetricCard({ label, value, sub, iconPath, valueColor, badge }: {
+  label: string; value: string; sub?: string; iconPath: React.ReactNode; valueColor?: string; badge?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-2xl p-4 border"
+    <div className="flex flex-col gap-2 rounded-2xl p-4 border transition-all duration-200 hover:border-slate-500"
       style={{ background: CARD_BG, borderColor: BORDER }}>
       <div className="flex items-center justify-between">
         <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-widest leading-tight">{label}</span>
@@ -191,6 +197,7 @@ function MetricCard({ label, value, sub, iconPath, valueColor }: {
           {value}
         </div>
         {sub && <div className="text-[10px] text-slate-500 mt-0.5">{sub}</div>}
+        {badge}
       </div>
     </div>
   );
@@ -210,16 +217,9 @@ function HealthScoreCircle({ score, reason }: { score: number; reason: string })
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#1e293b" strokeWidth="12" />
-          <circle
-            cx={size / 2} cy={size / 2} r={r}
-            fill="none"
-            stroke={color}
-            strokeWidth="12"
-            strokeLinecap="round"
-            strokeDasharray={circ}
-            strokeDashoffset={dashOffset}
-            style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)", filter: `drop-shadow(0 0 8px ${color}60)` }}
-          />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="12"
+            strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset}
+            style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)", filter: `drop-shadow(0 0 8px ${color}60)` }} />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-5xl font-black leading-none" style={{ color }}>{safeScore}</span>
@@ -231,6 +231,10 @@ function HealthScoreCircle({ score, reason }: { score: number; reason: string })
       <p className="text-slate-400 text-sm text-center max-w-xs leading-relaxed">{reason}</p>
     </div>
   );
+}
+
+function Divider() {
+  return <div className="h-px w-full" style={{ background: `linear-gradient(90deg, transparent, ${GREEN}40, transparent)` }} />;
 }
 
 function SectionHeader({ title, badge }: { title: string; badge?: string }) {
@@ -255,6 +259,15 @@ function Footer() {
   );
 }
 
+function splitAdviceSentences(text: string): string[] {
+  const byNewline = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 2);
+  if (byNewline.length >= 2) return byNewline;
+  const bySentence = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 4);
+  return bySentence.length >= 1 ? bySentence : [text];
+}
+
+/* ─────────────────────────── UPLOAD PAGE ─────────────────────────── */
+
 function UploadPage({ onAnalyse, onTestSample, error }: {
   onAnalyse: (file: File | null) => void;
   onTestSample: () => void;
@@ -272,9 +285,46 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
     if (f?.type === "application/pdf") setFile(f);
   }, []);
 
+  const features = [
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
+        </svg>
+      ),
+      title: "XIRR Calculator",
+      desc: "Real annualised return accounting for all SIP dates & amounts",
+    },
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="8" cy="8" r="5" /><circle cx="16" cy="16" r="5" />
+        </svg>
+      ),
+      title: "Overlap Detector",
+      desc: "Spots hidden stock & sector overlaps across your funds",
+    },
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+        </svg>
+      ),
+      title: "AI Rebalancing Plan",
+      desc: "Personalised 3-point action plan by Groq llama-3.3-70b",
+    },
+  ];
+
+  const steps = [
+    { n: "1", title: "Upload PDF", desc: "Drop your CAMS or KFintech statement" },
+    { n: "2", title: "AI Analyses", desc: "Groq reads every fund, SIP & transaction" },
+    { n: "3", title: "Get Report", desc: "Full X-Ray with XIRR, overlap & rebalancing" },
+  ];
+
   return (
     <div className="min-h-screen flex flex-col" style={{ background: BG }}>
-      <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: BORDER }}>
+      {/* Navbar */}
+      <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: BORDER }}>
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: GREEN }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -286,33 +336,34 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
         <span className="text-xs text-slate-500 hidden sm:block">ET AI Hackathon 2026</span>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-16">
-        <div className="w-full max-w-xl flex flex-col items-center gap-6 animate-fade-in-up">
+      <div className="flex-1 flex flex-col items-center px-4 py-10">
+        <div className="w-full max-w-xl flex flex-col items-center gap-6">
 
+          {/* Badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium"
             style={{ borderColor: GREEN_BORDER, background: GREEN_DIM, color: GREEN }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill={GREEN} stroke="none">
-              <circle cx="12" cy="12" r="12" />
-            </svg>
+            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: GREEN }}></span>
             Powered by Groq AI — Free for every Indian investor
           </div>
 
-          <div className="text-center flex flex-col gap-3">
-            <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight leading-none">
+          {/* Headline */}
+          <div className="text-center flex flex-col gap-2">
+            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight">
               <span className="text-white">MF Portfolio</span>{" "}
               <span style={{ color: GREEN }}>X-Ray</span>
             </h1>
-            <p className="text-slate-400 text-base sm:text-lg max-w-md">
+            <p className="text-slate-400 text-sm sm:text-base max-w-md">
               Upload your CAMS statement and get an AI-powered portfolio analysis in seconds
             </p>
           </div>
 
+          {/* Upload box */}
           <div
-            className="w-full rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-4 cursor-pointer p-10 transition-all duration-200"
+            className="w-full rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-4 cursor-pointer p-8 sm:p-10 transition-all duration-200"
             style={{
               borderColor: dragOver ? GREEN : GREEN_BORDER,
               background: dragOver ? "rgba(34,197,94,0.06)" : "rgba(30,41,59,0.5)",
-              minHeight: 200,
+              minHeight: 180,
             }}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -322,9 +373,9 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
             <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(f); }} />
 
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
               style={{ background: GREEN_DIM, border: `1.5px solid ${GREEN_BORDER}` }}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
                 <polyline points="14 2 14 8 20 8" />
                 <line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" />
@@ -341,11 +392,20 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
                 <p className="text-slate-200 font-medium text-sm">
                   Drop your CAMS PDF here, or <span style={{ color: GREEN }} className="underline underline-offset-2">browse</span>
                 </p>
-                <p className="text-slate-500 text-xs mt-1">Supports CAMS & KFintech consolidated account statements (PDF)</p>
+                <p className="text-slate-500 text-xs mt-1">Supports PDF statements up to 20 MB</p>
               </div>
             )}
           </div>
 
+          {/* Trust line */}
+          <div className="flex items-center gap-2 text-slate-500 text-xs">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Works with CAMS and KFintech statements &nbsp;·&nbsp; No data stored
+          </div>
+
+          {/* Error */}
           {error && (
             <div className="w-full rounded-xl px-4 py-3 border flex items-center gap-2 text-sm"
               style={{ background: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.3)", color: "#fca5a5" }}>
@@ -356,20 +416,20 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
             </div>
           )}
 
+          {/* Buttons */}
           <div className="w-full flex flex-col gap-3">
             <button
               onClick={() => onAnalyse(file)}
               disabled={!pdfReady || !file}
               className="w-full py-4 rounded-xl font-bold text-base transition-all duration-150 hover:opacity-90 active:scale-[0.985] disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: `linear-gradient(135deg, #22c55e, #16a34a)`, color: "#fff", boxShadow: "0 4px 24px rgba(34,197,94,0.35)" }}
+              style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff", boxShadow: "0 4px 24px rgba(34,197,94,0.35)" }}
             >
-              {!pdfReady ? "Loading pdf.js…" : !file ? "Select a PDF to continue" : "Analyse My Portfolio →"}
+              {!pdfReady ? "Loading…" : !file ? "Select a PDF to continue" : "Analyse My Portfolio →"}
             </button>
-
             <button
               onClick={onTestSample}
               className="w-full py-3.5 rounded-xl font-semibold text-sm border transition-all duration-150 hover:bg-slate-700/50 flex items-center justify-center gap-2"
-              style={{ borderColor: "#334155", color: "#94a3b8", background: "rgba(30,41,59,0.5)" }}
+              style={{ borderColor: BORDER, color: "#94a3b8", background: "rgba(30,41,59,0.5)" }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="5 3 19 12 5 21 5 3" />
@@ -378,16 +438,47 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
             </button>
           </div>
 
-          <div className="flex items-center gap-5 flex-wrap justify-center pt-1">
-            {["Groq llama-3.3-70b", "No data stored", "Instant results"].map((t) => (
-              <div key={t} className="flex items-center gap-1.5 text-slate-500 text-xs">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                {t}
+          {/* Feature highlight boxes */}
+          <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            {features.map((f) => (
+              <div key={f.title} className="rounded-xl p-4 border flex flex-col gap-2"
+                style={{ background: CARD_BG, borderColor: BORDER }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: GREEN_DIM }}>
+                  {f.icon}
+                </div>
+                <p className="text-slate-200 text-xs font-semibold">{f.title}</p>
+                <p className="text-slate-500 text-xs leading-relaxed">{f.desc}</p>
               </div>
             ))}
           </div>
+
+          {/* How it works */}
+          <div className="w-full pt-2">
+            <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest text-center mb-4">How it works</p>
+            <div className="flex flex-col sm:flex-row gap-0">
+              {steps.map((s, i) => (
+                <div key={s.n} className="flex sm:flex-col items-start sm:items-center gap-3 sm:gap-2 flex-1 relative">
+                  {/* connector line */}
+                  {i < steps.length - 1 && (
+                    <div className="hidden sm:block absolute top-4 left-1/2 w-full h-px" style={{ background: BORDER, zIndex: 0 }}></div>
+                  )}
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 relative z-10"
+                    style={{ background: GREEN_DIM, border: `1.5px solid ${GREEN_BORDER}`, color: GREEN }}>
+                    {s.n}
+                  </div>
+                  <div className="flex flex-col sm:items-center sm:text-center">
+                    <p className="text-slate-200 text-xs font-semibold">{s.title}</p>
+                    <p className="text-slate-500 text-xs mt-0.5">{s.desc}</p>
+                  </div>
+                  {/* mobile vertical connector */}
+                  {i < steps.length - 1 && (
+                    <div className="sm:hidden absolute left-3.5 top-8 w-px h-full" style={{ background: BORDER }}></div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -396,20 +487,30 @@ function UploadPage({ onAnalyse, onTestSample, error }: {
   );
 }
 
+/* ─────────────────────────── LOADING PAGE ─────────────────────────── */
+
 function LoadingPage() {
+  const messages = [
+    "Reading your portfolio…",
+    "Running AI analysis…",
+    "Preparing your report…",
+  ];
   const steps = ["Extracting PDF text", "Sending to Groq AI", "Computing XIRR & metrics", "Generating insights"];
+  const [msgIdx, setMsgIdx] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
+
   useEffect(() => {
-    const iv = setInterval(() => setActiveStep((s) => Math.min(s + 1, steps.length - 1)), 2000);
-    return () => clearInterval(iv);
+    const msgTimer = setInterval(() => setMsgIdx((m) => Math.min(m + 1, messages.length - 1)), 2000);
+    const stepTimer = setInterval(() => setActiveStep((s) => Math.min(s + 1, steps.length - 1)), 2000);
+    return () => { clearInterval(msgTimer); clearInterval(stepTimer); };
   }, []);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-10 px-4" style={{ background: BG }}>
-      <div className="flex flex-col items-center gap-7 animate-fade-in-up">
+      <div className="flex flex-col items-center gap-7" style={{ animation: "fadeInUp 0.5s ease both" }}>
         <div className="relative w-20 h-20">
           <div className="absolute inset-0 rounded-full" style={{ border: `4px solid rgba(34,197,94,0.12)` }}></div>
-          <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-green-400 animate-spin-slow"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-green-400 animate-spin" style={{ animationDuration: "1s" }}></div>
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: GREEN_DIM }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -419,12 +520,16 @@ function LoadingPage() {
           </div>
         </div>
 
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-white">Analysing your portfolio…</h2>
-          <p className="text-slate-400 text-sm mt-1">Groq AI is reading your statement</p>
+        <div className="text-center" style={{ minHeight: 56 }}>
+          <h2 className="text-2xl font-bold text-white transition-all duration-500"
+            key={msgIdx}
+            style={{ animation: "fadeInUp 0.4s ease both" }}>
+            {messages[msgIdx]}
+          </h2>
+          <p className="text-slate-400 text-sm mt-1">Groq AI · llama-3.3-70b-versatile</p>
         </div>
 
-        <div className="flex flex-col gap-3 w-60">
+        <div className="flex flex-col gap-3 w-64">
           {steps.map((step, i) => (
             <div key={step} className="flex items-center gap-3">
               <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-500"
@@ -449,66 +554,47 @@ function LoadingPage() {
   );
 }
 
-function splitAdviceSentences(text: string): string[] {
-  const byNewline = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 2);
-  if (byNewline.length >= 2) return byNewline;
-  const bySentence = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 4);
-  return bySentence.length >= 1 ? bySentence : [text];
-}
+/* ─────────────────────────── RESULTS PAGE ─────────────────────────── */
 
 function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () => void }) {
   const resultsRef = useRef<HTMLDivElement>(null);
   const html2canvasReady = useHTML2Canvas();
   const [sharing, setSharing] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => { const t = setTimeout(() => setVisible(true), 60); return () => clearTimeout(t); }, []);
 
   const adviceLines = splitAdviceSentences(result.rebalancingAdvice);
   const xirrPositive = result.xirr >= 0;
-  const gainPositive = result.totalGain >= 0;
+  const gainPositive = (result.totalGain ?? 0) >= 0;
+
+  const hasOverlap = result.overlapWarning?.toLowerCase().includes("overlap") ||
+    result.overlapWarning?.toLowerCase().includes("common") ||
+    result.overlapWarning?.toLowerCase().includes("similar");
 
   const handleShare = async () => {
     if (!resultsRef.current || !window.html2canvas) return;
     setSharing(true);
     try {
       const canvas = await window.html2canvas(resultsRef.current, {
-        backgroundColor: BG,
-        scale: 2,
-        useCORS: true,
-        logging: false,
+        backgroundColor: BG, scale: 2, useCORS: true, logging: false,
       });
       const link = document.createElement("a");
       link.download = "mf-portfolio-xray.png";
       link.href = canvas.toDataURL("image/png");
       link.click();
-    } finally {
-      setSharing(false);
-    }
+    } finally { setSharing(false); }
   };
 
-  const iconRupee = (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
-  );
-  const iconTrend = (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
-    </svg>
-  );
-  const iconGrid = (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-      <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-    </svg>
-  );
-  const iconDrag = (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
-  );
+  const iconRupee = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>;
+  const iconTrend = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>;
+  const iconGrid = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>;
+  const iconDrag = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>;
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: BG }}>
-      <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10" style={{ background: BG, borderColor: BORDER }}>
+      {/* Navbar */}
+      <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 z-10" style={{ background: BG, borderColor: BORDER }}>
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: GREEN }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -517,60 +603,66 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
           </div>
           <span className="text-white font-bold text-sm tracking-tight">MF Portfolio X-Ray</span>
           <span className="hidden sm:flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-            style={{ background: "rgba(34,197,94,0.12)", color: GREEN }}>
+            style={{ background: GREEN_DIM, color: GREEN }}>
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block"></span>
             Analysis Complete
           </span>
         </div>
-        <span className="text-slate-500 text-xs hidden sm:block">{result.numberOfFunds} funds detected</span>
+        <span className="text-slate-500 text-xs hidden sm:block">{result.numberOfFunds} funds · {TODAY}</span>
       </div>
 
-      <div ref={resultsRef} className="flex-1 px-4 sm:px-6 py-8" style={{ background: BG }}>
-        <div className="max-w-5xl mx-auto flex flex-col gap-6 animate-fade-in-up">
+      {/* Content */}
+      <div
+        ref={resultsRef}
+        className="flex-1 px-4 sm:px-6 py-8"
+        style={{
+          background: BG,
+          opacity: visible ? 1 : 0,
+          transform: visible ? "translateY(0)" : "translateY(16px)",
+          transition: "opacity 0.5s ease, transform 0.5s ease",
+        }}
+      >
+        <div className="max-w-5xl mx-auto flex flex-col gap-6">
+
+          {/* Report heading */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                Portfolio <span style={{ color: GREEN }}>X-Ray</span> Report
+              </h1>
+              <p className="text-slate-500 text-xs mt-1">{TODAY} &nbsp;·&nbsp; {result.numberOfFunds} active schemes detected</p>
+            </div>
+            <span className="text-[10px] px-2.5 py-1 rounded-full font-semibold self-start sm:self-auto"
+              style={{ background: GREEN_DIM, color: GREEN, border: `1px solid ${GREEN_BORDER}` }}>
+              Groq llama-3.3-70b
+            </span>
+          </div>
+
+          <Divider />
 
           {/* ── 6 Metric Cards ── */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <MetricCard
-              label="Total Value"
-              value={formatINR(result.totalValue)}
-              sub="Current market value"
-              valueColor={GREEN}
-              iconPath={iconRupee}
-            />
-            <MetricCard
-              label="Amount Invested"
-              value={formatINR(result.amountInvested ?? 0)}
-              sub="Total invested"
-              iconPath={iconRupee}
-            />
-            <MetricCard
-              label="Total Gain"
-              value={`${gainPositive ? "+" : ""}${formatINR(result.totalGain ?? 0)}`}
-              sub={gainPositive ? "Profit" : "Loss"}
-              valueColor={gainPositive ? GREEN : "#ef4444"}
-              iconPath={iconTrend}
-            />
+            <MetricCard label="Total Value" value={formatINR(result.totalValue)} sub="Current market value" valueColor={GREEN} iconPath={iconRupee} />
+            <MetricCard label="Amount Invested" value={formatINR(result.amountInvested ?? 0)} sub="Total invested" iconPath={iconRupee} />
+            <MetricCard label="Total Gain" value={`${gainPositive ? "+" : ""}${formatINR(result.totalGain ?? 0)}`} sub={gainPositive ? "Profit" : "Loss"} valueColor={gainPositive ? GREEN : "#ef4444"} iconPath={iconTrend} />
             <MetricCard
               label="XIRR Returns"
               value={`${xirrPositive ? "+" : ""}${result.xirr.toFixed(1)}%`}
               sub="Annualised return"
               valueColor={xirrPositive ? GREEN : "#ef4444"}
               iconPath={iconTrend}
+              badge={
+                <div className="mt-1.5 flex items-center gap-1">
+                  <span className="text-[9px] text-slate-600">Nifty 50 avg: </span>
+                  <span className="text-[9px] font-semibold" style={{ color: "#f59e0b" }}>13% CAGR</span>
+                </div>
+              }
             />
-            <MetricCard
-              label="Funds"
-              value={String(result.numberOfFunds)}
-              sub="Active schemes"
-              iconPath={iconGrid}
-            />
-            <MetricCard
-              label="Expense Drag"
-              value={`${result.expenseDrag.toFixed(2)}%`}
-              sub="Weighted avg TER"
-              valueColor="#ef4444"
-              iconPath={iconDrag}
-            />
+            <MetricCard label="Funds" value={String(result.numberOfFunds)} sub="Active schemes" iconPath={iconGrid} />
+            <MetricCard label="Expense Drag" value={`${result.expenseDrag.toFixed(2)}%`} sub="Weighted avg TER" valueColor="#ef4444" iconPath={iconDrag} />
           </div>
+
+          <Divider />
 
           {/* ── Portfolio Health Score ── */}
           <div className="rounded-2xl border p-6 flex flex-col items-center gap-2"
@@ -579,20 +671,19 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
             <HealthScoreCircle score={result.portfolioScore ?? 0} reason={result.scoreReason ?? ""} />
           </div>
 
-          {/* ── Chart + Overlap grid ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
+          <Divider />
 
+          {/* ── Chart + Overlap ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+
+            {/* Donut chart */}
             <div className="lg:col-span-3 rounded-2xl border p-5 sm:p-6 flex flex-col gap-5"
               style={{ background: CARD_BG, borderColor: BORDER }}>
               <SectionHeader title="Portfolio Allocation" />
-              <div className="relative flex justify-center" style={{ height: 230 }}>
-                <DonutChart funds={result.funds} />
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-slate-500 text-xs">Portfolio</span>
-                  <span className="text-white font-bold text-xl">{result.numberOfFunds} Funds</span>
-                </div>
+              <div className="relative flex justify-center" style={{ height: 280 }}>
+                <DonutChart funds={result.funds} centerLabel={formatINR(result.totalValue)} />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
                 {result.funds.map((f, i) => (
                   <div key={i} className="flex items-center gap-2 min-w-0">
                     <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}></div>
@@ -603,24 +694,48 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
               </div>
             </div>
 
+            {/* Overlap warning */}
             <div className="lg:col-span-2 rounded-2xl border p-5 sm:p-6 flex flex-col gap-4"
-              style={{ background: "rgba(30,20,0,0.6)", borderColor: "rgba(234,179,8,0.4)" }}>
+              style={{
+                background: hasOverlap ? "rgba(30,10,10,0.7)" : "rgba(10,30,15,0.6)",
+                borderColor: hasOverlap ? "rgba(239,68,68,0.45)" : "rgba(34,197,94,0.35)",
+              }}>
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: "rgba(234,179,8,0.15)", border: "1px solid rgba(234,179,8,0.35)" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#eab308" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
+                  style={{
+                    background: hasOverlap ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)",
+                    border: `1px solid ${hasOverlap ? "rgba(239,68,68,0.35)" : "rgba(34,197,94,0.35)"}`,
+                  }}>
+                  {hasOverlap ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
                 </div>
-                <h2 className="text-sm font-bold uppercase tracking-widest" style={{ color: "#eab308" }}>Overlap Warning</h2>
+                <h2 className="text-sm font-bold uppercase tracking-widest"
+                  style={{ color: hasOverlap ? "#ef4444" : GREEN }}>
+                  {hasOverlap ? "Overlap Warning" : "Well Diversified"}
+                </h2>
               </div>
-              <div className="rounded-xl p-4" style={{ background: "rgba(234,179,8,0.07)", border: "1px solid rgba(234,179,8,0.2)" }}>
+              <div className="rounded-xl p-4"
+                style={{
+                  background: hasOverlap ? "rgba(239,68,68,0.06)" : "rgba(34,197,94,0.06)",
+                  border: `1px solid ${hasOverlap ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)"}`,
+                }}>
                 <p className="text-slate-300 text-sm leading-relaxed">{result.overlapWarning}</p>
               </div>
-              <p className="text-xs text-slate-600">High overlap between funds reduces diversification benefit.</p>
+              <p className="text-xs text-slate-600">
+                {hasOverlap ? "High overlap between funds reduces diversification benefit." : "Your funds show good diversification across stocks and sectors."}
+              </p>
             </div>
           </div>
+
+          <Divider />
 
           {/* ── AI Rebalancing Plan ── */}
           <div className="rounded-2xl border p-5 sm:p-6"
@@ -634,12 +749,10 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
               </div>
               <h2 className="text-base font-bold text-white">Your AI Rebalancing Plan</h2>
               <span className="ml-auto text-[10px] px-2 py-1 rounded-full font-semibold hidden sm:block"
-                style={{ background: GREEN_DIM, color: GREEN }}>
-                Groq · llama-3.3-70b
-              </span>
+                style={{ background: GREEN_DIM, color: GREEN }}>Groq · llama-3.3-70b</span>
             </div>
 
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3">
               {adviceLines.map((line, i) => (
                 <div key={i} className="flex gap-3 items-start rounded-xl p-3"
                   style={{ background: "rgba(34,197,94,0.05)", border: `1px solid rgba(34,197,94,0.1)` }}>
@@ -661,25 +774,20 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
           </div>
 
           {/* ── Action buttons ── */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pb-2">
-            <button
-              onClick={handleShare}
-              disabled={!html2canvasReady || sharing}
-              className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl font-semibold text-sm transition-all duration-150 hover:opacity-90 active:scale-[0.985] disabled:opacity-50"
-              style={{ background: `linear-gradient(135deg, #22c55e, #16a34a)`, color: "#fff", boxShadow: "0 4px 20px rgba(34,197,94,0.3)" }}
-            >
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pb-4">
+            <button onClick={handleShare} disabled={!html2canvasReady || sharing}
+              className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl font-semibold text-sm transition-all duration-150 hover:opacity-90 active:scale-[0.985] disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff", boxShadow: "0 4px 20px rgba(34,197,94,0.3)" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" />
               </svg>
               {sharing ? "Saving…" : "Share Results"}
             </button>
-
             <button onClick={onReset}
-              className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl font-semibold text-sm border transition-all duration-150 hover:border-green-700 hover:text-green-300"
+              className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl font-semibold text-sm border transition-all duration-150 hover:border-green-700 hover:text-green-300"
               style={{ borderColor: BORDER, color: "#94a3b8", background: "rgba(30,41,59,0.5)" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="1 4 1 10 7 10" />
-                <path d="M3.51 15a9 9 0 1 0 .49-4.88" />
+                <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 .49-4.88" />
               </svg>
               Analyse Another Portfolio
             </button>
@@ -692,6 +800,8 @@ function ResultsPage({ result, onReset }: { result: AnalysisResult; onReset: () 
     </div>
   );
 }
+
+/* ─────────────────────────── ROOT ─────────────────────────── */
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("upload");

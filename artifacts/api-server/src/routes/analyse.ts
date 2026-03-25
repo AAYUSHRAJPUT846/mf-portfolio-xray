@@ -16,21 +16,7 @@ router.post("/analyse", async (req, res) => {
     return;
   }
 
-  const systemPrompt = `You are an expert Indian mutual fund analyst. Analyse CAMS consolidated account statements.
-Always respond with ONLY a valid JSON object — no markdown, no explanation, no extra text.
-If the text doesn't look like a CAMS statement, still return your best guess JSON based on whatever fund data you can find, with placeholder values where data is missing.`;
-
-  const userPrompt = `Analyse this CAMS mutual fund statement and return a JSON object with EXACTLY these fields:
-- totalValue: number (total portfolio value in rupees, e.g. 2847350)
-- xirr: number (annualised XIRR return as a percentage, e.g. 14.2)
-- numberOfFunds: number (count of distinct fund schemes)
-- expenseDrag: number (weighted average expense ratio as percentage, e.g. 0.84)
-- funds: array of objects, each with { name: string, percentage: number } — top 9 funds by value, percentages must sum to 100
-- overlapWarning: string (2-4 sentences describing stock/sector overlaps between funds, naming specific funds and overlapping stocks)
-- rebalancingAdvice: string (5-6 bullet-point numbered recommendations in plain English for rebalancing, each on a new line starting with number and period)
-
-Statement text:
-${text.slice(0, 12000)}`;
+  const prompt = `You are an expert SEBI-registered Indian mutual fund analyst. Analyse this CAMS mutual fund statement carefully and return ONLY a raw JSON object with zero extra text, no markdown, no explanation. JSON fields required: totalValue (number, current portfolio value in rupees), amountInvested (number, total invested), totalGain (number, profit or loss), xirr (number, annualised return %), numberOfFunds (number), expenseDrag (number, avg expense ratio %), funds (array of objects with name and percentage), overlapWarning (string, mention specific fund names if overlap found), rebalancingAdvice (string, 3 specific sentences mentioning actual fund names), portfolioScore (number 0-100), scoreReason (string, one sentence). Statement text: ${text.slice(0, 12000)}`;
 
   try {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -42,8 +28,7 @@ ${text.slice(0, 12000)}`;
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
+          { role: "user", content: prompt },
         ],
         max_tokens: 2048,
         temperature: 0.2,
